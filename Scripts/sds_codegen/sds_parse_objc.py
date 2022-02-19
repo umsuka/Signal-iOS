@@ -73,10 +73,7 @@ class ParsedClass:
         self.property_map[property.name] = property
 
     def properties(self):
-        result = []
-        for name in sorted(self.property_map.keys()):
-            result.append(self.property_map[name])
-        return result
+        return [self.property_map[name] for name in sorted(self.property_map.keys())]
 
     def property_names(self):
         return sorted(self.property_map.keys())
@@ -145,8 +142,7 @@ class Namespace:
         return clazz
 
     def find_class(self, class_name):
-        clazz = self.class_map.get(class_name)
-        return clazz
+        return self.class_map.get(class_name)
 
     def class_names(self):
         return sorted(self.class_map.keys())

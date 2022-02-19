@@ -93,13 +93,9 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='Precommit script.')
     parser.add_argument('--path', help='used to specify a path to process.')
     args = parser.parse_args()
-    
-    
-    if args.path:
-        dir_path = args.path
-    else:
-        dir_path = git_repo_path
 
+
+    dir_path = args.path or git_repo_path
     for rootdir, dirnames, filenames in os.walk(dir_path):
         for filename in filenames:
             file_path = os.path.abspath(os.path.join(rootdir, filename))

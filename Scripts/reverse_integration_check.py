@@ -132,23 +132,9 @@ def main():
     ]
     tags_of_concern = [tag for tag in tags_of_concern if tag not in tags_to_ignore]
 
-    # Interal Builds
-    #
-    # If you want to tag a build which is not intended to be reverse
-    # integrated, include the text "internal" somewhere in the tag name, such as
-    #
-    # 1.2.3.4.5-internal
-    # 1.2.3.4.5-internal-mkirk
-    #
-    # NOTE: that if you upload the build to test flight, you still need to give testflight
-    # a numeric build number - so tag won't match the build number exactly as they do
-    # with production build tags. That's fine.
-    #
-    # To avoid collision with "production" build numbers, use at least a 5
-    # digit build number.
-    tags_of_concern = [tag for tag in tags_of_concern if "internal" not in tag]
-
-    if len(tags_of_concern) > 0:
+    if tags_of_concern := [
+        tag for tag in tags_of_concern if "internal" not in tag
+    ]:
         logging.debug("Found unmerged tags newer than epoch: %s" % tags_of_concern)
         raise RuntimeError("💥 Found unmerged tags: %s" % tags_of_concern)
     else:

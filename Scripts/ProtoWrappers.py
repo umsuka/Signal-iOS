@@ -56,27 +56,25 @@ def supress_adjacent_capital_letters(name):
         lastWasUpper = (char.upper() == char)
     result = ''.join(chars)
     if result.endswith('Id'):
-        result = result[:-2] + 'ID'
+        result = f'{result[:-2]}ID'
     if result.endswith('Url'):
-        result = result[:-3] + 'URL'
+        result = f'{result[:-3]}URL'
     return result
 
 
 def swift_type_for_proto_primitive_type(proto_type):
-    if proto_type == 'string':
-        return 'String'
-    elif proto_type == 'uint64':
-        return 'UInt64'
-    elif proto_type == 'uint32':
-        return 'UInt32'
-    elif proto_type == 'fixed64':
-        return 'UInt64'
-    elif proto_type == 'bool':
+    if proto_type == 'bool':
         return 'Bool'
     elif proto_type == 'bytes':
         return 'Data'
     elif proto_type == 'double':
         return 'Double'
+    elif proto_type == 'string':
+        return 'String'
+    elif proto_type == 'uint32':
+        return 'UInt32'
+    elif proto_type in ['uint64', 'fixed64']:
+        return 'UInt64'
     else:
         return None
 
@@ -205,7 +203,7 @@ class BaseContext(object):
 
     def derive_wrapped_swift_name(self):
         names = self.inherited_proto_names()
-        return self.args.proto_prefix + '_' + '.'.join(names)
+        return f'{self.args.proto_prefix}_' + '.'.join(names)
 
     def qualified_proto_name(self):
         names = self.inherited_proto_names()
@@ -222,10 +220,7 @@ class BaseContext(object):
         return result
 
     def siblings(self):
-        result = []
-        if self.parent is not None:
-            result = self.parent.children()
-        return result
+        return self.parent.children() if self.parent is not None else []
 
     def ancestors(self):
         result = []
@@ -267,25 +262,21 @@ class BaseContext(object):
         swift_type = swift_type_for_proto_primitive_type(field.proto_type)
         if swift_type is not None:
             return swift_type
+        matching_context = self.context_for_proto_type(field)
+        if matching_context is not None:
+            return matching_context.swift_name
         else:
-            matching_context = self.context_for_proto_type(field)
-            if matching_context is not None:
-                return matching_context.swift_name
-            else:
-                # Failure
-                return field.proto_type
+            # Failure
+            return field.proto_type
 
     def swift_type_for_field(self, field, suppress_optional=False):
         base_type = self.base_swift_type_for_field(field)
-        
+
         if field.rules == 'optional':
             if suppress_optional:
                 return base_type
             can_be_optional = self.can_field_be_optional(field)
-            if can_be_optional:
-                return '%s?' % base_type
-            else:
-                return base_type
+            return '%s?' % base_type if can_be_optional else base_type
         elif field.rules == 'required':
             return base_type
         elif field.rules == 'repeated':
@@ -301,42 +292,27 @@ class BaseContext(object):
             'double', )
 
     def can_field_be_optional(self, field):
-        if self.is_field_primitive(field):
-            return not field.is_required
-
-        # if field.proto_type == 'uint64':
-        #     return False
-        # elif field.proto_type == 'uint32':
-        #     return False
-        # elif field.proto_type == 'fixed64':
-        #     return False
-        # elif field.proto_type == 'bool':
-        #     return False
-        # elif self.is_field_an_enum(field):
-        if self.is_field_an_enum(field):
-            return True
-        else:
-            return True
+        return not field.is_required if self.is_field_primitive(field) else True
 
     def is_field_an_enum(self, field):
         matching_context = self.context_for_proto_type(field)
-        if matching_context is not None:
-            if type(matching_context) is EnumContext:
-                return True
+        if matching_context is not None and type(matching_context) is EnumContext:
+            return True
         return False
 
     def is_field_oneof(self, field):
         matching_context = self.context_for_proto_type(field)
-        if matching_context is not None:
-            if type(matching_context) is OneOfContext:
-                return True
+        if matching_context is not None and type(matching_context) is OneOfContext:
+            return True
         return False
 
     def is_field_a_proto(self, field):
         matching_context = self.context_for_proto_type(field)
-        if matching_context is not None:
-            if type(matching_context) is MessageContext:
-                return True
+        if (
+            matching_context is not None
+            and type(matching_context) is MessageContext
+        ):
+            return True
         return False
 
     def can_field_be_optional_objc(self, field):
@@ -427,7 +403,7 @@ class MessageField:
         self.is_trusted_mapping = is_trusted_mapping
 
     def has_accessor_name(self):
-        name = 'has' + self.name_swift[0].upper() + self.name_swift[1:]
+        name = f'has{self.name_swift[0].upper()}{self.name_swift[1:]}'
         if name == 'hasId':
             # TODO: I'm not sure why "Apple Swift Proto" code formats the
             # the name in this way.
@@ -566,8 +542,6 @@ class MessageContext(BaseContext):
                                 writer.push_indent()
                                 writer.add('// TODO: We could make this a crashing assert.')
                                 writer.add('owsFailDebug("Unsafe unwrap of missing optional: %s.%s.")' % ( self.proto_name, field.name_swift, ) )
-                                writer.pop_indent()
-                                writer.add('}')
                             else:
                                 if is_objc_accessible:
                                     writer.add_objc()
@@ -576,8 +550,8 @@ class MessageContext(BaseContext):
                                 writer.add('guard %s else {' % field.has_accessor_name() )
                                 writer.push_indent()
                                 writer.add('return nil')
-                                writer.pop_indent()
-                                writer.add('}')
+                            writer.pop_indent()
+                            writer.add('}')
                             if self.is_field_an_enum(field):
                                 enum_context = self.context_for_proto_type(field)
                                 writer.add('return %s(proto.%s)' % ( enum_context.wrap_func_name(), field.name_swift, ) )

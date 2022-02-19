@@ -98,10 +98,7 @@ class ParsedClass:
             self.property_map[property.name] = property
 
     def properties(self):
-        result = []
-        for name in sorted(self.property_map.keys()):
-            result.append(self.property_map[name])
-        return result
+        return [self.property_map[name] for name in sorted(self.property_map.keys())]
 
     def database_subclass_properties(self):
         # More than one subclass of a SDS model may declare properties
@@ -153,16 +150,20 @@ class ParsedClass:
         return result
 
     def record_id_source(self):
-        for property in self.properties():
-            if property.name == 'sortId':
-                return property.name
-        return None
+        return next(
+            (
+                property.name
+                for property in self.properties()
+                if property.name == 'sortId'
+            ),
+            None,
+        )
 
     def is_sds_model(self):
         if self.super_class_name is None:
             # print 'is_sds_model (1):', self.name, self.super_class_name
             return False
-        if not self.super_class_name in global_class_map:
+        if self.super_class_name not in global_class_map:
             # print 'is_sds_model (2):', self.name, self.super_class_name
             return False
         if self.super_class_name in (OLD_BASE_MODEL_CLASS_NAME, NEW_BASE_MODEL_CLASS_NAME, ):
@@ -183,7 +184,7 @@ class ParsedClass:
     def table_superclass(self):
         if self.super_class_name is None:
             return self
-        if not self.super_class_name in global_class_map:
+        if self.super_class_name not in global_class_map:
             return self
         if self.super_class_name == OLD_BASE_MODEL_CLASS_NAME:
             return self
@@ -194,10 +195,12 @@ class ParsedClass:
 
     def all_superclass_names(self):
         result = [self.name]
-        if self.super_class_name is not None:
-            if self.super_class_name in global_class_map:
-                super_class = global_class_map[self.super_class_name]
-                result += super_class.all_superclass_names()
+        if (
+            self.super_class_name is not None
+            and self.super_class_name in global_class_map
+        ):
+            super_class = global_class_map[self.super_class_name]
+            result += super_class.all_superclass_names()
         return result
 
     def has_any_superclass_with_name(self, name):
@@ -227,7 +230,7 @@ class ParsedClass:
        return True
 
     def record_name(self):
-        return remove_prefix_from_class_name(self.name) + 'Record'
+        return f'{remove_prefix_from_class_name(self.name)}Record'
 
     def sorted_record_properties(self):
 
@@ -269,7 +272,10 @@ class ParsedClass:
         all_property_orders = [property.property_order for property in record_properties if property.property_order]
         # We determine the "next" order we would assign to any
         # new property without an order.
-        next_property_order = 1 + (max(all_property_orders) if len(all_property_orders) > 0 else 0)
+        next_property_order = 1 + (
+            max(all_property_orders) if all_property_orders else 0
+        )
+
         # Pre-sort model properties by name, so that if we add more
         # than one at a time they are nicely (and stable-y) sorted
         # in an attractive way.
@@ -390,13 +396,9 @@ class TypeInfo:
         elif did_force_optional:
             if deserialization_not_optional is not None:
                 value_expr = 'try SDSDeserialization.%s(%s, name: "%s")' % ( deserialization_not_optional, value_expr, value_name)
-        else:
-            # Do nothing; we don't need to unpack this non-optional.
-            pass
-
         initializer_param_type = self.swift_type()
         if is_optional:
-            initializer_param_type = initializer_param_type + '?'
+            initializer_param_type = f'{initializer_param_type}?'
 
         # Special case this oddball type.
         if property.has_custom_column_source():
@@ -571,10 +573,7 @@ class ParsedProperty:
         elif objc_type == 'CGFloat':
             return 'Double'
         elif objc_type == 'NSNumber *':
-            if unpack_nsnumber:
-                return swift_type_for_nsnumber(self)
-            else:
-                return 'NSNumber'
+            return swift_type_for_nsnumber(self) if unpack_nsnumber else 'NSNumber'
         else:
             return None
 
@@ -623,7 +622,7 @@ class ParsedProperty:
             return TypeInfo(self.field_override_swift_type(), objc_type, should_use_blob=self.field_override_should_use_blob(), is_enum=self.field_override_is_enum(), field_override_column_type=self.field_override_column_type(), field_override_record_swift_type=self.field_override_record_swift_type())
         elif objc_type in enum_type_map:
             enum_type = objc_type
-            return TypeInfo(enum_type, objc_type, is_enum=True)
+            return TypeInfo(enum_type, enum_type, is_enum=True)
         elif objc_type.startswith('enum '):
             enum_type = objc_type[len('enum '):]
             return TypeInfo(enum_type, objc_type, is_enum=True)
@@ -636,16 +635,20 @@ class ParsedProperty:
         if objc_type in ('struct CGSize', 'struct CGRect', 'struct CGPoint', ):
             objc_type = objc_type[len('struct '):]
             swift_type = objc_type
-            return TypeInfo(swift_type, objc_type, should_use_blob=True, is_codable=USE_CODABLE_FOR_PRIMITIVES)
+            return TypeInfo(
+                swift_type,
+                swift_type,
+                should_use_blob=True,
+                is_codable=USE_CODABLE_FOR_PRIMITIVES,
+            )
 
         swift_type = self.convert_objc_class_to_swift(self.objc_type)
-        if swift_type is not None:
-            if self.is_objc_type_codable(objc_type):
-                # print '----- is_objc_type_codable true:', objc_type
-                return TypeInfo(swift_type, objc_type, should_use_blob=True, is_codable=False)
-            # print '----- is_objc_type_codable false:', objc_type
+        if swift_type is not None and (
+            self.is_objc_type_codable(objc_type)
+            or not self.is_objc_type_codable(objc_type)
+        ):
+            # print '----- is_objc_type_codable true:', objc_type
             return TypeInfo(swift_type, objc_type, should_use_blob=True, is_codable=False)
-
         fail('Unknown type(3):', self.class_name, self.objc_type, self.name)
 
 
@@ -709,7 +712,7 @@ class ParsedProperty:
         manually_typed_fields = configuration_json.get('manually_typed_fields')
         if manually_typed_fields is None:
             fail('Configuration JSON is missing manually_typed_fields')
-        key = self.class_name + '.' + self.name
+        key = f'{self.class_name}.{self.name}'
 
         if key in manually_typed_fields:
             return manually_typed_fields[key][override_field]
@@ -748,10 +751,7 @@ class ParsedProperty:
 
     def column_source(self):
         custom_name = custom_property_column_source(self)
-        if custom_name is not None:
-            return custom_name
-        else:
-            return self.name
+        return custom_name if custom_name is not None else self.name
 
     def has_custom_column_source(self):
         return custom_property_column_source(self) is not None
@@ -761,7 +761,7 @@ class ParsedProperty:
 
 
     def deep_copy_record_invocation(self, value_name, did_force_optional):
- 
+     
         swift_type = self.swift_type_safe()
         objc_type = self.objc_type_safe()
         is_optional = self.is_optional
@@ -769,7 +769,7 @@ class ParsedProperty:
 
         initializer_param_type = swift_type
         if is_optional:
-            initializer_param_type = initializer_param_type + '?'
+            initializer_param_type = f'{initializer_param_type}?'
 
         simple_type_map = {
             'NSString *': 'String',
@@ -786,20 +786,21 @@ class ParsedProperty:
                 initializer_param_type += '?'
             return ['let %s: %s = modelToCopy.%s' % ( value_name, initializer_param_type, model_accessor, ),]
 
- 
-        can_shallow_copy = False
-        if self.type_info().is_numeric():
-            can_shallow_copy = True
-        elif self.is_enum():
-            can_shallow_copy = True
 
+        can_shallow_copy = False
+        if (
+            self.type_info().is_numeric()
+            or not self.type_info().is_numeric()
+            and self.is_enum()
+        ):
+            can_shallow_copy = True
         if can_shallow_copy:
             return ['let %s: %s = modelToCopy.%s' % ( value_name, initializer_param_type, model_accessor, ),]
-        
+
         initializer_param_type = initializer_param_type.replace('AnyObject', 'Any')
 
-        if is_optional:
-            return [
+        return (
+            [
                 '// NOTE: If this generates build errors, you made need to',
                 '// modify DeepCopy.swift to support this type.',
                 '//',
@@ -807,21 +808,37 @@ class ParsedProperty:
                 '//',
                 '// * Implement DeepCopyable for this type (e.g. a model).',
                 '// * Modify DeepCopies.deepCopy() to support this type (e.g. a collection).',
-                'let %s: %s' % ( value_name, initializer_param_type, ),
-                'if let %sForCopy = modelToCopy.%s {' % ( value_name, model_accessor, ),
-                '   %s = try DeepCopies.deepCopy(%sForCopy)' % ( value_name, value_name, ),
+                'let %s: %s'
+                % (
+                    value_name,
+                    initializer_param_type,
+                ),
+                'if let %sForCopy = modelToCopy.%s {'
+                % (
+                    value_name,
+                    model_accessor,
+                ),
+                '   %s = try DeepCopies.deepCopy(%sForCopy)'
+                % (
+                    value_name,
+                    value_name,
+                ),
                 '} else {',
-                '   %s = nil' % ( value_name, ),
+                '   %s = nil' % (value_name,),
                 '}',
             ]
-        else:
-            return [
+            if is_optional
+            else [
                 '// NOTE: If this generates build errors, you made need to',
                 '// implement DeepCopyable for this type in DeepCopy.swift.',
-                'let %s: %s = try DeepCopies.deepCopy(modelToCopy.%s)' % ( value_name, initializer_param_type, model_accessor, ),
+                'let %s: %s = try DeepCopies.deepCopy(modelToCopy.%s)'
+                % (
+                    value_name,
+                    initializer_param_type,
+                    model_accessor,
+                ),
             ]
-
-        fail('I don\'t know how to deep copy this type: %s / %s' % ( objc_type, swift_type) )
+        )
     
     
     def possible_class_type_for_property(self):
@@ -2127,7 +2144,7 @@ def remove_prefix_from_class_name(class_name):
 def get_record_type_enum_name(class_name):
     name = remove_prefix_from_class_name(class_name)
     if name[0].isnumeric():
-        name = '_' + name
+        name = f'_{name}'
     return to_swift_identifier_name(name)
 
 def record_identifier(class_name):
@@ -2163,8 +2180,6 @@ def swift_type_for_enum(enum_name):
         return 'Int32'
     elif objc_type == 'unsigned long long':
         return 'uint64_t'
-    elif objc_type == 'unsigned long long':
-        return 'UInt64'
     elif objc_type == 'unsigned long':
         return 'UInt64'
     elif objc_type == 'unsigned int':
@@ -2286,14 +2301,14 @@ def should_ignore_property(property):
     properties_to_ignore = configuration_json.get('properties_to_ignore')
     if properties_to_ignore is None:
         fail('Configuration JSON is missing list of properties to ignore during serialization.')
-    key = property.class_name + '.' + property.name
+    key = f'{property.class_name}.{property.name}'
     return key in properties_to_ignore
 
 def custom_property_column_source(property):
     custom_names = configuration_json.get('custom_property_column_sources')
     if custom_names is None:
         fail('Configuration JSON is missing dict of custom_property_column_sources.')
-    key = property.class_name + '.' + property.name
+    key = f'{property.class_name}.{property.name}'
 
     return custom_names.get(key)
 
@@ -2320,8 +2335,8 @@ def should_ignore_class(clazz):
 
     if clazz.super_class_name is None:
          return False
-    if not clazz.super_class_name in global_class_map:
-         return False
+    if clazz.super_class_name not in global_class_map:
+        return False
     super_clazz = global_class_map[clazz.super_class_name]
     return should_ignore_class(super_clazz)
 
@@ -2329,7 +2344,7 @@ def accessor_name_for_property(property):
     custom_accessors = configuration_json.get('custom_accessors')
     if custom_accessors is None:
         fail('Configuration JSON is missing list of custom property accessors.')
-    key = property.class_name + '.' + property.name
+    key = f'{property.class_name}.{property.name}'
     # print '--?--', key, custom_accessors.get(key, property.name)
     return custom_accessors.get(key, property.name)
 
@@ -2339,7 +2354,7 @@ def custom_column_name_for_property(property):
     custom_column_names = configuration_json.get('custom_column_names')
     if custom_column_names is None:
         fail('Configuration JSON is missing list of custom column names.')
-    key = property.class_name + '.' + property.name
+    key = f'{property.class_name}.{property.name}'
     # print '--?--', key, custom_accessors.get(key, property.name)
     return custom_column_names.get(key)
 
@@ -2348,7 +2363,7 @@ def was_property_renamed_for_property(property):
     renamed_column_names = configuration_json.get('renamed_column_names')
     if renamed_column_names is None:
         fail('Configuration JSON is missing list of renamed column names.')
-    key = property.class_name + '.' + property.name
+    key = f'{property.class_name}.{property.name}'
     # print '--?--', key, custom_accessors.get(key, property.name)
     return renamed_column_names.get(key) is not None
 
@@ -2377,12 +2392,11 @@ def update_property_order_json(property_order_json_path):
     sds_common.write_text_file_if_changed(property_order_json_path, json_string)
 
 def property_order_key(property, record_name):
-    return record_name + '.' + property.name
+    return f'{record_name}.{property.name}'
 
 def property_order_for_property(property, record_name):
     key = property_order_key(property, record_name)
-    result = property_order_json.get(key)
-    return result
+    return property_order_json.get(key)
 
 def set_property_order_for_property(property, record_name, value):
     key = property_order_key(property, record_name)
