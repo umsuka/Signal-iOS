@@ -132,7 +132,7 @@ class Version3:
         self.patch = patch
         
     def formatted(self):
-        return str(self.major) + "." + str(self.minor) + "." + str(self.patch)
+        return f'{str(self.major)}.{str(self.minor)}.{str(self.patch)}'
 
 
 # Represents a version string with 4 dotted values, e.g. 1.2.3.4.
@@ -144,35 +144,33 @@ class Version4:
         self.build = build
         
     def formatted(self):
-        return str(self.major) + "." + str(self.minor) + "." + str(self.patch) + "." + str(self.build)
+        return f'{str(self.major)}.{str(self.minor)}.{str(self.patch)}.' + str(
+            self.build
+        )
 
     def asVersion3(self):
         return Version3(self.major, self.minor, self.patch)
 
 
 def parse_version_4(text):
-   # print 'text', text
-   regex = re.compile(r'^(\d+)\.(\d+)\.(\d+)\.?(\d+)?$')
-   match = regex.search(text)
-   # print 'match', match
-   if not match:
-       fail('Could not parse .plist')
-   if len(match.groups()) < 3 or len(match.groups()) > 4:
-       fail('Could not parse .plist')
-   major = int(match.group(1))
-   minor = int(match.group(2))
-   patch = int(match.group(3))
-   if match.group(4) != None:
-       build = int(match.group(4))
-   else:
-       build = 0
+    # print 'text', text
+    regex = re.compile(r'^(\d+)\.(\d+)\.(\d+)\.?(\d+)?$')
+    match = regex.search(text)
+    # print 'match', match
+    if not match:
+        fail('Could not parse .plist')
+    if len(match.groups()) < 3 or len(match.groups()) > 4:
+        fail('Could not parse .plist')
+    major = int(match.group(1))
+    minor = int(match.group(2))
+    patch = int(match.group(3))
+    build = int(match.group(4)) if match.group(4) != None else 0
+    version = Version4(major, minor, patch, build)
+    # Verify that roundtripping yields the same value (or a version3 equivalent)
+    if version.formatted() != text and version.asVersion3().formatted() != text:
+        fail('Could not parse .plist')
 
-   version = Version4(major, minor, patch, build)
-   # Verify that roundtripping yields the same value (or a version3 equivalent)
-   if version.formatted() != text and version.asVersion3().formatted() != text:
-       fail('Could not parse .plist')
-   
-   return version
+    return version
 
 
 def parse_version_1(text):

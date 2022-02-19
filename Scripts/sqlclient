@@ -18,7 +18,7 @@ SIGNAL_FALLBACK_DATABASE_PATH = "grdb/signal.sqlite"
 
 quietMode=False
 def failWithError(string):
-    print("Error: " + string, file=sys.stderr)
+    print(f'Error: {string}', file=sys.stderr)
     exit(1)
 
 def printInfo(string = ""):
@@ -36,7 +36,7 @@ class Simulator:
     def __init__(self, searchString, useStaging):
 
         # Get JSON list of simulators matching searchString
-        cmd = "xcrun simctl list -j devices " + searchString
+        cmd = f'xcrun simctl list -j devices {searchString}'
         resultString = runCommand(cmd)
         simDict = json.loads(resultString)
         devicesByRuntime = simDict["devices"]
@@ -56,7 +56,7 @@ class Simulator:
         # Select a candidate
         selectedCandidate = None
 
-        if len(candidates) == 0:
+        if not candidates:
             failWithError("Could not find a \"" + searchString + "\" simulator")
         elif len(candidates) == 1:
             selectedCandidate = candidates[0]
@@ -66,7 +66,7 @@ class Simulator:
             for idx, candidate in enumerate(candidates):
                 printInfo("{}:\t{:40}\t{} {} ({})".format(idx, candidate["name"], candidate["type"], candidate["os"], candidate["udid"]))
 
-            while selectedCandidate == None:
+            while selectedCandidate is None:
                 try:
                     idx = int(input("Select a simulator: "))
                     selectedCandidate = candidates[idx]
@@ -77,16 +77,15 @@ class Simulator:
         self.groupID = SIGNAL_APPGROUP_STAGING if useStaging else SIGNAL_APPGROUP
         self.groupContainer = self.fetchGroupContainer(self.udid, self.groupID)
         printInfo("Selected simulator: " + selectedCandidate["name"] + " (" + selectedCandidate["udid"] + ")")
-        printInfo("Using groupID: " + self.groupID)
+        printInfo(f'Using groupID: {self.groupID}')
         printInfo()
 
     def parseDebugPayload(self):
-        path = self.groupContainer + "/" + SIGNAL_DEBUG_PAYLOAD_NAME
+        path = f'{self.groupContainer}/{SIGNAL_DEBUG_PAYLOAD_NAME}'
         try:
             fd = open(path, 'r')
             data = fd.read()
-            payload = json.loads(data)
-            return payload
+            return json.loads(data)
         except IOError:
             return None
 
@@ -98,9 +97,13 @@ class Simulator:
             if os.path.isfile(payloadPath):
                 return payloadPath
             else:
-                printInfo("Debug payload " + payloadPath[-50:] + " not found. Falling back the standard path.")
+                printInfo(
+                    f'Debug payload {payloadPath[-50:]}'
+                    + " not found. Falling back the standard path."
+                )
 
-        return (self.groupContainer + "/" + SIGNAL_FALLBACK_DATABASE_PATH)
+
+        return f'{self.groupContainer}/{SIGNAL_FALLBACK_DATABASE_PATH}'
 
     def passphraseIfAvailable(self):
         debugPayload = self.parseDebugPayload()
@@ -169,17 +172,17 @@ elif args.simulator:
     dbPath = target.databasePath()
     passphrase = target.passphraseIfAvailable()
 
-if dbPath == None:
+if dbPath is None:
     failWithError("No valid database path")
 elif os.path.isfile(dbPath) == False:
-    failWithError("Not valid path " + dbPath)
+    failWithError(f'Not valid path {dbPath}')
 
 if args.passphrase:
     passphrase = args.passphrase
-if passphrase == None:
+if passphrase is None:
     passphrase = getpass.getpass("Please enter the passphrase. Alternatively, set up a plaintext database key in Debug UI > Misc > Save plaintext database key. Then, rerun the command. ")
 
-if passphrase == None or len(passphrase) == 0:
+if passphrase is None or len(passphrase) == 0:
     failWithError("No valid sqlcipher passphrase")
 
 passphrase = preparePassphrase(passphrase)

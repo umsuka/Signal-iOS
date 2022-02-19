@@ -28,18 +28,17 @@ class include:
                                 ('"' if self.isQuote else '>'),
                                 )
         if self.comment.strip():
-            result += ' ' + self.comment.strip()
+            result += f' {self.comment.strip()}'
         return result
 
 
 def is_include_or_import(line):
     line = line.strip()
-    if line.startswith('#include '):
-        return True
-    elif line.startswith('#import '):
-        return True
-    else:
-        return False
+    return bool(
+        line.startswith('#include ')
+        or not line.startswith('#include ')
+        and line.startswith('#import ')
+    )
 
 
 def parse_include(line):
@@ -56,7 +55,7 @@ def parse_include(line):
     elif not remainder:
         return None
     else:
-        print ('Unexpected import or include: '+ line)
+        print(f'Unexpected import or include: {line}')
         sys.exit(1)
 
     comment = None
@@ -64,7 +63,7 @@ def parse_include(line):
         isQuote = True
         endIndex = remainder.find('"', 1)
         if endIndex < 0:
-            print ('Unexpected import or include: '+ line)
+            print(f'Unexpected import or include: {line}')
             sys.exit(1)
         body = remainder[1:endIndex]
         comment = remainder[endIndex+1:]
@@ -72,12 +71,12 @@ def parse_include(line):
         isQuote = False
         endIndex = remainder.find('>', 1)
         if endIndex < 0:
-            print ('Unexpected import or include: '+ line)
+            print(f'Unexpected import or include: {line}')
             sys.exit(1)
         body = remainder[1:endIndex]
         comment = remainder[endIndex+1:]
     else:
-        print ('Unexpected import or include: '+ remainder)
+        print(f'Unexpected import or include: {remainder}')
         sys.exit(1)
 
     return include(isInclude, isQuote, body, comment)
@@ -87,11 +86,7 @@ def parse_includes(text):
     lines = text.split('\n')
 
     includes = []
-    for line in lines:
-        include = parse_include(line)
-        if include:
-            includes.append(include)
-
+    includes.extend(include for line in lines if (include := parse_include(line)))
     return includes
 
 
@@ -171,18 +166,15 @@ def sort_include_block(text, filepath, filename, file_extension):
 def sort_forward_decl_statement_block(text, filepath, filename, file_extension):
     lines = text.split('\n')
     lines = [line.strip() for line in lines if line.strip()]
-    lines = list(set(lines))
-    lines.sort()
+    lines = sorted(set(lines))
     return '\n' + '\n'.join(lines) + '\n'
 
 
 def find_matching_section(text, match_test):
     lines = text.split('\n')
-    first_matching_line_index = None
-    for index, line in enumerate(lines):
-        if match_test(line):
-            first_matching_line_index = index
-            break
+    first_matching_line_index = next(
+        (index for index, line in enumerate(lines) if match_test(line)), None
+    )
 
     if first_matching_line_index is None:
         return None

@@ -193,26 +193,24 @@ def extract_macros(filepath):
     is_swift = file_ext in ('.swift')
 
     macros = []
-    
+
     with open(filepath, 'rt') as f:
         text = f.read()
-    
+
     lines = text.split('\n')
     for line in lines:
         # Match lines of this form: 
         # #define OWSProdCritical(__eventName) ...
-    
+
         if is_swift:
             matcher = re.compile(r'func (OWSProd[^\(]+)\(.+[,\)]')
         else:
             matcher = re.compile(r'#define (OWSProd[^\(]+)\(.+[,\)]')
-        # matcher = re.compile(r'#define (OWSProd)')
-        match = matcher.search(line)
-        if match:
+        if match := matcher.search(line):
             macro = match.group(1).strip()
             # print 'macro', macro
             macros.append(macro)
-    
+
     return macros
     
     

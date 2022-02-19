@@ -17,7 +17,7 @@ def file_match(fname, pat):
 	except IOError:
 		return
 
-	for i, line in enumerate(f):
+	for line in f:
 		if pat.search(line):
 			return True
 	f.close()
@@ -29,8 +29,7 @@ def rgrep_match(dir_name, s_pat):
 	for dirpath, dirnames, filenames in os.walk(dir_name):
 		for fname in filenames:
 			fullname = os.path.join(dirpath, fname)
-			match=file_match(fullname, pat)
-			if match:
+			if match := file_match(fullname, pat):
 				return match
 	return False
 
